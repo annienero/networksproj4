@@ -1,0 +1,17 @@
+#!/usr/bin/python -u
+
+import sys
+import socket
+
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+s.connect(("fring.ccs.neu.edu" , 80))
+s.sendall("GET / HTTP/1.1\r\nHost: fring.ccs.neu.edu\r\n\r\n")
+print s.recv(4096)
+s.close
+
+username = sys.argv[1]
+password = sys.argv[2]
+
+print(username)
+print(password)
