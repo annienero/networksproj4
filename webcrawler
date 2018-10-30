@@ -3,15 +3,54 @@
 import sys
 import socket
 
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-s.connect(("fring.ccs.neu.edu" , 80))
-s.sendall("GET / HTTP/1.1\r\nHost: fring.ccs.neu.edu\r\n\r\n")
-print s.recv(4096)
-s.close
+HOST = "fring.ccs.neu.edu"
+HTTP_VERSION = "HTTP/1.1"
 
 username = sys.argv[1]
 password = sys.argv[2]
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.connect((HOST, 80))
 
-print(username)
-print(password)
+cookies = {}
+
+def httpRequest(method, resource, headers, body):
+    request = method + " " + resource + " " + HTTP_VERSION + "\r\n"
+    for key in headers:
+        request += key + ": " + headers[key] + "\r\n"
+    request += "\r\n"
+    s.sendall(request)
+    response = s.recv(4096)
+    #print(response) # just to see what we see
+    return response
+
+
+def parseResponseCookies(response):
+    global cookies
+    tokenizedResponse = response.split("\n")
+    for line in tokenizedResponse:
+        if line == "\r\n":
+            break
+        if "Set-Cookie" in line:
+            cookieInfo = line[12:]
+            equalIdx = cookieInfo.index("=")
+            semicolonIdx = cookieInfo.index(";")
+            key = cookieInfo[:equalIdx]
+            value = cookieInfo[equalIdx + 1:semicolonIdx]
+            cookies[key] = value
+
+def login():
+    headers = {}
+    headers["Host"] = HOST
+    body = {}
+    body["username"]
+    httpRequest()
+
+def main():
+    headers = {}
+    headers["Host"] = HOST
+    body = {}
+    parseResponseCookies(httpRequest("GET", "/accounts/login/?next=/fakebook/", headers, body))
+    print(cookies)
+
+main()
+s.close
