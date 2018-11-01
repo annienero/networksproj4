@@ -3,8 +3,8 @@
 import sys
 import socket
 
-HOST = "fring.ccs.neu.edu"
-HTTP_VERSION = "HTTP/1.1"
+HOST = 'fring.ccs.neu.edu'
+HTTP_VERSION = 'HTTP/1.1'
 
 username = sys.argv[1]
 password = sys.argv[2]
@@ -14,43 +14,65 @@ s.connect((HOST, 80))
 cookies = {}
 
 def httpRequest(method, resource, headers, body):
-    request = method + " " + resource + " " + HTTP_VERSION + "\r\n"
+    request = method + ' ' + resource + ' ' + HTTP_VERSION + '\r\n'
     for key in headers:
-        request += key + ": " + headers[key] + "\r\n"
-    request += "\r\n"
+        request += key + ': ' + headers[key] + '\r\n'
+    request += 'Connection: keep-alive\r\n'
+    request += 'Content-Length: ' + str(len(body.encode('utf-8'))) + '\r\n'
+    request += 'Cache-Control: max-age=0\r\n'
+    request += 'Origin: http://' + HOST + '\r\n'
+#    request += 'Upgrade-Insecure-Requests: 1\r\n'
+    request += 'Content-Type: application/x-www-form-urlencoded\r\n'
+    request += 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8\r\n'
+    request += 'Referer: http://fring.ccs.neu.edu/accounts/login/\r\n'
+    request += '\r\n'
+    request += body
+    print("\n\n\nREQUEST: ")
+    print(request)
     s.sendall(request)
     response = s.recv(4096)
-    #print(response) # just to see what we see
+    print('\n\n\n\n\nRESPONSE')
+    print(response)
     return response
 
 
 def parseResponseCookies(response):
     global cookies
-    tokenizedResponse = response.split("\n")
+    tokenizedResponse = response.split('\n')
     for line in tokenizedResponse:
-        if line == "\r\n":
+        if line == '\r\n':
             break
-        if "Set-Cookie" in line:
+        if 'Set-Cookie' in line:
             cookieInfo = line[12:]
-            equalIdx = cookieInfo.index("=")
-            semicolonIdx = cookieInfo.index(";")
+            equalIdx = cookieInfo.index('=')
+            semicolonIdx = cookieInfo.index(';')
             key = cookieInfo[:equalIdx]
             value = cookieInfo[equalIdx + 1:semicolonIdx]
             cookies[key] = value
 
+def parseRequestDict(dict, delim):
+    str = ''
+    for key in dict:
+        str += key + '=' + dict[key] + delim
+    return str[:len(str) - len(delim)]
+
+
 def login():
     headers = {}
-    headers["Host"] = HOST
+    headers['Host'] = HOST
+    headers['Cookie'] = parseRequestDict(cookies, '; ')
     body = {}
-    body["username"]
-    httpRequest()
+    body['username'] = username
+    body['password'] = password
+    body['next'] = '%2Ffakebook%2F'
+    body['csrfmiddlewaretoken'] = cookies['csrftoken']
+    httpRequest('POST', '/accounts/login/', headers, parseRequestDict(body, '&'))
 
 def main():
     headers = {}
-    headers["Host"] = HOST
-    body = {}
-    parseResponseCookies(httpRequest("GET", "/accounts/login/?next=/fakebook/", headers, body))
-    print(cookies)
+    headers['Host'] = HOST
+    parseResponseCookies(httpRequest('GET', '/accounts/login/', headers, ''))
+    login()
 
 main()
 s.close
