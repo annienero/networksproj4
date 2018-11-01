@@ -13,6 +13,23 @@ s.connect((HOST, 80))
 
 cookies = {}
 
+# updates our cookies dictionary with any cookies the given response told us to set
+def parseResponseCookies(response):
+    global cookies
+    tokenizedResponse = response.decode('utf-8').split('\n')
+    for line in tokenizedResponse:
+        if line == '\r\n':
+            break
+        if 'Set-Cookie' in line:
+            cookieInfo = line[12:]
+            equalIdx = cookieInfo.index('=')
+            semicolonIdx = cookieInfo.index(';')
+            key = cookieInfo[:equalIdx]
+            value = cookieInfo[equalIdx + 1:semicolonIdx]
+            cookies[key] = value
+            print("-------- SET A COOKIE, KEY = " + key + ", VALUE = " + value)
+
+#returns the response gotten from sending the described HTTP request, and parses cookies from the response
 def httpRequest(method, resource, headers, body):
     request = method + ' ' + resource + ' ' + HTTP_VERSION + '\r\n'
     for key in headers:
@@ -25,30 +42,18 @@ def httpRequest(method, resource, headers, body):
     request += 'Content-Type: application/x-www-form-urlencoded\r\n'
     request += 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8\r\n'
     request += 'Referer: http://fring.ccs.neu.edu/accounts/login/\r\n'
+    if cookies:
+        request += 'Cookie: ' + parseRequestDict(cookies, '; ') + '\r\n'
     request += '\r\n'
     request += body
     print("\n\n\nREQUEST: ")
     print(request)
-    s.sendall(request)
+    s.sendall(request.encode())
     response = s.recv(4096)
-    print('\n\n\n\n\nRESPONSE')
+    print('\n\n\n\nRESPONSE')
     print(response)
+    parseResponseCookies(response)
     return response
-
-
-def parseResponseCookies(response):
-    global cookies
-    tokenizedResponse = response.split('\n')
-    for line in tokenizedResponse:
-        if line == '\r\n':
-            break
-        if 'Set-Cookie' in line:
-            cookieInfo = line[12:]
-            equalIdx = cookieInfo.index('=')
-            semicolonIdx = cookieInfo.index(';')
-            key = cookieInfo[:equalIdx]
-            value = cookieInfo[equalIdx + 1:semicolonIdx]
-            cookies[key] = value
 
 def parseRequestDict(dict, delim):
     str = ''
@@ -57,22 +62,56 @@ def parseRequestDict(dict, delim):
     return str[:len(str) - len(delim)]
 
 
+# returns the response gotten from sending the login request to fakebook
 def login():
     headers = {}
     headers['Host'] = HOST
-    headers['Cookie'] = parseRequestDict(cookies, '; ')
     body = {}
     body['username'] = username
     body['password'] = password
     body['next'] = '%2Ffakebook%2F'
     body['csrfmiddlewaretoken'] = cookies['csrftoken']
-    httpRequest('POST', '/accounts/login/', headers, parseRequestDict(body, '&'))
+    return httpRequest('POST', '/accounts/login/', headers, parseRequestDict(body, '&'))
 
 def main():
     headers = {}
     headers['Host'] = HOST
-    parseResponseCookies(httpRequest('GET', '/accounts/login/', headers, ''))
+    print("-------- TRYING TO CONNECT")
+    loginResponse = httpRequest('GET', '/accounts/login/', headers, '')
+    print("-------- TRYING TO LOG IN")
     login()
+
+    # AHAH we are now getting a 302 found and we have to look at the Location header to find where to redirect to!
+    # SEE THIS LINK FOR INFO: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Location
+    
+    #find the Location header in loginResponse, look at its value, make another request that goes there!
+
+
+
+# ----------- SOME OTHER DUMB TESTING STUFF I WAS DOING WE CAN PROBABLY DELETE IT LATER --------
+    
+    # print("SENDING LITERALLY THE SAME QUERY")
+    # userpagetestquery = "GET /fakebook/752557289/ HTTP/1.1\r\nHost: fring.ccs.neu.edu\r\nConnection: keep-alive\r\nUpgrade-Insecure-Requests: 1\r\nUser-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36\r\nAccept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8\r\nReferer: http://fring.ccs.neu.edu/fakebook/\r\nAccept-Encoding: gzip, deflate\r\nAccept-Language: en-US,en;q=0.9\r\nCookie: csrftoken=04af2767ae0679b7487dbcc5b48c61ba; sessionid=1fe8616513394e664510049150bd6f73"
+    # s.sendall(userpagetestquery.encode())
+    # response = s.recv(4096)
+    # #print("RESPONSE: " + response)
+    # print("RESPONSE: " + response.decode('utf-8'))
+
+# GET /fakebook/752557289/ HTTP/1.1
+# Host: fring.ccs.neu.edu
+# Connection: keep-alive
+# Upgrade-Insecure-Requests: 1
+# User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36
+# Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8
+# Referer: http://fring.ccs.neu.edu/fakebook/
+# Accept-Encoding: gzip, deflate
+# Accept-Language: en-US,en;q=0.9
+# Cookie: csrftoken=04af2767ae0679b7487dbcc5b48c61ba; sessionid=1fe8616513394e664510049150bd6f73
+
+    # headers = {}
+    # headers['Host'] = HOST
+    # print("-------- TRYING TO REACH A USER PAGE")
+    # httpRequest('GET', '/fakebook/752557289/', headers, '')
 
 main()
 s.close
