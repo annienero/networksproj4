@@ -2,6 +2,8 @@
 
 import sys
 import socket
+import Queue
+from HTMLParser import HTMLParser
 
 HOST = 'fring.ccs.neu.edu'
 HTTP_VERSION = 'HTTP/1.1'
@@ -12,6 +14,11 @@ s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect((HOST, 80))
 
 cookies = {}
+visited = {}
+toVisit = []
+secretFlags = []
+secretFlagInData = False
+
 
 def resolveResponseHeaders(response):
     headerMap = {}
@@ -24,8 +31,6 @@ def resolveResponseHeaders(response):
             headerMap[line[:colonIdx]] = line[colonIdx + 2:]
         except Exception as e:
             continue
-    print('printing map --------------')
-    print(headerMap)
     return headerMap
 
 
@@ -89,17 +94,51 @@ def login():
     body['csrfmiddlewaretoken'] = cookies['csrftoken']
     return httpRequest('POST', '/accounts/login/', headers, parseRequestDict(body, '&'))
 
+# create a subclass and override the handler methods
+class MyHTMLParser(HTMLParser):
+    def handle_starttag(self, tag, attrs):
+        global toVisit
+        global secretFlagInData
+        print "Encountered a start tag:", tag
+        #if its a secret flags:
+        secretFlagInData = (tag == 'h2' and ('class', 'secret_flag') in attrs)
+        for attr in attrs:
+            if tag == 'a' and attr[0] == 'href' and attr[1][:10] == '/fakebook/':
+                toVisit.append(HOST + attr[1])
+
+    def handle_endtag(self, tag):
+        print "Encountered an end tag :", tag
+
+    def handle_data(self, data):
+        global secretFlags
+        if secretFlagInData:
+            secretFlags.append(data[6:])
+
 def main():
+    global visited
+    global toVisit
     headers = {}
     headers['Host'] = HOST
-    print("-------- TRYING TO CONNECT")
-    loginResponse = httpRequest('GET', '/accounts/login/', headers, '')
-    print("-------- TRYING TO LOG IN")
+    httpRequest('GET', '/accounts/login/', headers, '')
     loginResponse = login()
     loginHeaders = resolveResponseHeaders(loginResponse)
-    location = loginHeaders['Location']
-    print('about to get fakeboook ------------------------')
-    print(httpRequest('GET', location, headers, ''))
+    toVisit.append(loginHeaders['Location'])
+    parser = MyHTMLParser()
+    while len(toVisit) > 0:
+        curPage = toVisit.pop(0)
+        if curPage in visited:
+            continue
+        visited['curPage'] = True
+        response = httpRequest('GET', curPage, headers, '')
+        try:
+            firstTagIdx = response.index('<')
+            htmlText = response[firstTagIdx:]
+            parser.feed(htmlText)
+        except Exception as e:
+            pass
+        print "------------TOVISIT IS: ", toVisit
+        print "------------secretFlags IS: ", secretFlags
+
 
 
     # AHAH we are now getting a 302 found and we have to look at the Location header to find where to redirect to!
