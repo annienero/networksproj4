@@ -13,6 +13,22 @@ s.connect((HOST, 80))
 
 cookies = {}
 
+def resolveResponseHeaders(response):
+    headerMap = {}
+    tokenizedResponse = response.decode('utf-8').split('\n')
+    for line in tokenizedResponse:
+        if line == '\r\n':
+            break
+        try:
+            colonIdx = line.index(':')
+            headerMap[line[:colonIdx]] = line[colonIdx + 2:]
+        except Exception as e:
+            continue
+    print('printing map --------------')
+    print(headerMap)
+    return headerMap
+
+
 # updates our cookies dictionary with any cookies the given response told us to set
 def parseResponseCookies(response):
     global cookies
@@ -79,17 +95,22 @@ def main():
     print("-------- TRYING TO CONNECT")
     loginResponse = httpRequest('GET', '/accounts/login/', headers, '')
     print("-------- TRYING TO LOG IN")
-    login()
+    loginResponse = login()
+    loginHeaders = resolveResponseHeaders(loginResponse)
+    location = loginHeaders['Location']
+    print('about to get fakeboook ------------------------')
+    print(httpRequest('GET', location, headers, ''))
+
 
     # AHAH we are now getting a 302 found and we have to look at the Location header to find where to redirect to!
     # SEE THIS LINK FOR INFO: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Location
-    
+
     #find the Location header in loginResponse, look at its value, make another request that goes there!
 
 
 
 # ----------- SOME OTHER DUMB TESTING STUFF I WAS DOING WE CAN PROBABLY DELETE IT LATER --------
-    
+
     # print("SENDING LITERALLY THE SAME QUERY")
     # userpagetestquery = "GET /fakebook/752557289/ HTTP/1.1\r\nHost: fring.ccs.neu.edu\r\nConnection: keep-alive\r\nUpgrade-Insecure-Requests: 1\r\nUser-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36\r\nAccept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8\r\nReferer: http://fring.ccs.neu.edu/fakebook/\r\nAccept-Encoding: gzip, deflate\r\nAccept-Language: en-US,en;q=0.9\r\nCookie: csrftoken=04af2767ae0679b7487dbcc5b48c61ba; sessionid=1fe8616513394e664510049150bd6f73"
     # s.sendall(userpagetestquery.encode())
