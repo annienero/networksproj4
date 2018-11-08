@@ -38,7 +38,7 @@ def resolveResponseHeaders(response):
 # updates our cookies dictionary with any cookies the given response told us to set
 def parseResponseCookies(response):
     global cookies
-    tokenizedResponse = response.decode('utf-8').split('\n')
+    tokenizedResponse = response.decode('utf-8').split('\r\n')
     for line in tokenizedResponse:
         if line == '\r\n':
             break
@@ -121,6 +121,7 @@ def main():
     httpRequest('GET', '/accounts/login/', headers, '')
     loginResponse = login()
     loginHeaders = resolveResponseHeaders(loginResponse)
+    print "LOGIN: ", loginResponse
     toVisit.append(loginHeaders['Location'])
     parser = MyHTMLParser()
     while len(toVisit) > 0:
