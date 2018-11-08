@@ -18,11 +18,12 @@ visited = {}
 toVisit = []
 secretFlags = []
 secretFlagInData = False
+visitSize = 0
 
 
 def resolveResponseHeaders(response):
     headerMap = {}
-    tokenizedResponse = response.decode('utf-8').split('\n')
+    tokenizedResponse = response.decode('utf-8').split('\r\n')
     for line in tokenizedResponse:
         if line == '\r\n':
             break
@@ -48,32 +49,38 @@ def parseResponseCookies(response):
             key = cookieInfo[:equalIdx]
             value = cookieInfo[equalIdx + 1:semicolonIdx]
             cookies[key] = value
-            print("-------- SET A COOKIE, KEY = " + key + ", VALUE = " + value)
+            #print("-------- SET A COOKIE, KEY = " + key + ", VALUE = " + value)
 
 #returns the response gotten from sending the described HTTP request, and parses cookies from the response
 def httpRequest(method, resource, headers, body):
+    global s
     request = method + ' ' + resource + ' ' + HTTP_VERSION + '\r\n'
     for key in headers:
         request += key + ': ' + headers[key] + '\r\n'
     request += 'Connection: keep-alive\r\n'
     request += 'Content-Length: ' + str(len(body.encode('utf-8'))) + '\r\n'
-    request += 'Cache-Control: max-age=0\r\n'
+    #request += 'Cache-Control: max-age=0\r\n'
     request += 'Origin: http://' + HOST + '\r\n'
 #    request += 'Upgrade-Insecure-Requests: 1\r\n'
     request += 'Content-Type: application/x-www-form-urlencoded\r\n'
-    request += 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8\r\n'
-    request += 'Referer: http://fring.ccs.neu.edu/accounts/login/\r\n'
+    #request += 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8\r\n'
+    #request += 'Referer: http://fring.ccs.neu.edu/accounts/login/\r\n'
     if cookies:
         request += 'Cookie: ' + parseRequestDict(cookies, '; ') + '\r\n'
     request += '\r\n'
     request += body
-    print("\n\n\nREQUEST: ")
-    print(request)
+    #print("\n\n\nREQUEST: ")
+    #print(request)
     s.sendall(request.encode())
     response = s.recv(4096)
-    print('\n\n\n\nRESPONSE')
-    print(response)
+    #print('\n\n\n\nRESPONSE')
+    #print(response)
     parseResponseCookies(response)
+    responseMap = resolveResponseHeaders(response)
+    if 'Connection' in responseMap and responseMap['Connection'] == 'close':
+        s.close()
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((HOST, 80))
     return response
 
 def parseRequestDict(dict, delim):
@@ -99,15 +106,18 @@ class MyHTMLParser(HTMLParser):
     def handle_starttag(self, tag, attrs):
         global toVisit
         global secretFlagInData
-        print "Encountered a start tag:", tag
+        #print "Encountered a start tag:", tag
         #if its a secret flags:
         secretFlagInData = (tag == 'h2' and ('class', 'secret_flag') in attrs)
         for attr in attrs:
-            if tag == 'a' and attr[0] == 'href' and attr[1][:10] == '/fakebook/':
-                toVisit.append(HOST + attr[1])
+            if attr[0] == 'href' and attr[1][:10] == '/fakebook/':
+                if not (HOST + attr[1]) in visited:
+                    #print "ADDDING TO TOVISIT: ", HOST + attr[1]
+                    toVisit.append(attr[1])
 
     def handle_endtag(self, tag):
-        print "Encountered an end tag :", tag
+        #print "Encountered an end tag :", tag
+        return
 
     def handle_data(self, data):
         global secretFlags
@@ -117,6 +127,7 @@ class MyHTMLParser(HTMLParser):
 def main():
     global visited
     global toVisit
+    global visitSize
     headers = {}
     headers['Host'] = HOST
     httpRequest('GET', '/accounts/login/', headers, '')
@@ -125,10 +136,9 @@ def main():
     toVisit.append(loginHeaders['Location'])
     parser = MyHTMLParser()
     while len(toVisit) > 0:
+        visitSize+=1
         curPage = toVisit.pop(0)
-        if curPage in visited:
-            continue
-        visited['curPage'] = True
+        visited[curPage] = True
         response = httpRequest('GET', curPage, headers, '')
         try:
             firstTagIdx = response.index('<')
@@ -136,9 +146,6 @@ def main():
             parser.feed(htmlText)
         except Exception as e:
             pass
-        print "------------TOVISIT IS: ", toVisit
-        print "------------secretFlags IS: ", secretFlags
-
 
 
     # AHAH we are now getting a 302 found and we have to look at the Location header to find where to redirect to!
@@ -172,6 +179,7 @@ def main():
     # headers['Host'] = HOST
     # print("-------- TRYING TO REACH A USER PAGE")
     # httpRequest('GET', '/fakebook/752557289/', headers, '')
-
 main()
-s.close
+for flag in secretFlags:
+    print flag
+s.close()
