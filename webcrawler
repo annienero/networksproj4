@@ -106,7 +106,7 @@ class MyHTMLParser(HTMLParser):
         #if its a secret flags:
         secretFlagInData = (tag == 'h2' and ('class', 'secret_flag') in attrs)
         for attr in attrs:
-            if attr[0] == 'href' and attr[1][:10] == '/fakebook/':
+            if tag == 'a' and attr[0] == 'href' and attr[1][:10] == '/fakebook/':
                 if not (attr[1]) in visited:
                     toVisit.append(attr[1])
 
