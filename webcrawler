@@ -7,6 +7,7 @@ from HTMLParser import HTMLParser
 
 HOST = 'fring.ccs.neu.edu'
 HTTP_VERSION = 'HTTP/1.1'
+READ_SIZE = 8192
 
 username = sys.argv[1]
 password = sys.argv[2]
@@ -58,6 +59,8 @@ def httpRequest(method, resource, headers, body):
         request += key + ': ' + headers[key] + '\r\n'
     request += 'Connection: keep-alive\r\n'
     request += 'Content-Length: ' + str(len(body.encode('utf-8'))) + '\r\n'
+    request += 'Accept-Encoding: identity\r\n'
+    request += 'Accept: text/html\r\n'
     request += 'Origin: http://' + HOST + '\r\n'
     request += 'Content-Type: application/x-www-form-urlencoded\r\n'
     if cookies:
@@ -66,19 +69,15 @@ def httpRequest(method, resource, headers, body):
     request += body
     print "REQUEST", request
     s.sendall(request.encode())
-    response = s.recv(4096)
+    response = s.recv(READ_SIZE)
     print "RESPONSE", response
     parseResponseCookies(response)
     responseMap = resolveResponseHeaders(response)
-    while 'Connection' in responseMap and responseMap['Connection'] == 'close':
+    if 'Connection' in responseMap and responseMap['Connection'] == 'close':
         s.close()
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((HOST, 80))
-        s.sendall(request.encode())
-        response = s.recv(4096)
-        print "RESPONSE", response
-        parseResponseCookies(response)
-        responseMap = resolveResponseHeaders(response)
+        return httpRequest(method, resource, headers, body)
     return response
 
 def parseRequestDict(dict, delim):
