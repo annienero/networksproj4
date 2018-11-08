@@ -64,14 +64,21 @@ def httpRequest(method, resource, headers, body):
         request += 'Cookie: ' + parseRequestDict(cookies, '; ') + '\r\n'
     request += '\r\n'
     request += body
+    print "REQUEST", request
     s.sendall(request.encode())
     response = s.recv(4096)
+    print "RESPONSE", response
     parseResponseCookies(response)
     responseMap = resolveResponseHeaders(response)
-    if 'Connection' in responseMap and responseMap['Connection'] == 'close':
+    while 'Connection' in responseMap and responseMap['Connection'] == 'close':
         s.close()
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((HOST, 80))
+        s.sendall(request.encode())
+        response = s.recv(4096)
+        print "RESPONSE", response
+        parseResponseCookies(response)
+        responseMap = resolveResponseHeaders(response)
     return response
 
 def parseRequestDict(dict, delim):
@@ -101,7 +108,7 @@ class MyHTMLParser(HTMLParser):
         secretFlagInData = (tag == 'h2' and ('class', 'secret_flag') in attrs)
         for attr in attrs:
             if attr[0] == 'href' and attr[1][:10] == '/fakebook/':
-                if not (HOST + attr[1]) in visited:
+                if not (attr[1]) in visited:
                     toVisit.append(attr[1])
 
     def handle_endtag(self, tag):
