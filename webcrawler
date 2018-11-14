@@ -5,33 +5,51 @@ import socket
 import Queue
 from HTMLParser import HTMLParser
 
+# constants
 HOST = 'fring.ccs.neu.edu'
 HTTP_VERSION = 'HTTP/1.1'
-READ_SIZE = 8192
+READ_SIZE = 4096
 
+# grab username and password arguments
 username = sys.argv[1]
 password = sys.argv[2]
+
+# set up socket connection
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect((HOST, 80))
 
+# init map to store cookies
 cookies = {}
+
+# init map to store visited pages
 visited = {}
+
+# init list to store pages to visit
 toVisit = []
-secretFlags = []
+
+# init set to store unique secret key values
+secretFlags = set()
+
+# to remember if there's a secret flag when parsing html
 secretFlagInData = False
-visitSize = 0
 
-
+# create a map of the headers of the given response
 def resolveResponseHeaders(response):
     headerMap = {}
+    # split up response over '\r\n'
     tokenizedResponse = response.decode('utf-8').split('\r\n')
+    # loop through each line
     for line in tokenizedResponse:
+        # 2 '\r\n's in a row so we got through all the headers
         if line == '\r\n':
             break
         try:
+            # look for a colon in the line
             colonIdx = line.index(':')
+            # ex. key is 'Connection', value is 'keep-alive' 
             headerMap[line[:colonIdx]] = line[colonIdx + 2:]
         except Exception as e:
+            # couldn't find a colon, done with headers
             continue
     return headerMap
 
@@ -43,8 +61,11 @@ def parseResponseCookies(response):
     for line in tokenizedResponse:
         if line == '\r\n':
             break
+        # if we see a cookie in the line
         if 'Set-Cookie' in line:
+            # ignore 'Set-Cookie: '
             cookieInfo = line[12:]
+            # ex. csrftoken=1234567abcdefg -> key is 'csrftoken', value is '1234567abcdefg' 
             equalIdx = cookieInfo.index('=')
             semicolonIdx = cookieInfo.index(';')
             key = cookieInfo[:equalIdx]
@@ -54,32 +75,47 @@ def parseResponseCookies(response):
 #returns the response gotten from sending the described HTTP request, and parses cookies from the response
 def httpRequest(method, resource, headers, body):
     global s
-    request = method + ' ' + resource + ' ' + HTTP_VERSION + '\r\n'
-    for key in headers:
-        request += key + ': ' + headers[key] + '\r\n'
+    request = method + ' ' + resource + ' ' + HTTP_VERSION + '\r\n' # set method, resource, and http version
+    for key in headers: # add each header from the given map of headers
+        request += key + ': ' + headers[key] + '\r\n' 
     request += 'Connection: keep-alive\r\n'
-    request += 'Content-Length: ' + str(len(body.encode('utf-8'))) + '\r\n'
+    request += 'Content-Length: ' + str(len(body.encode('utf-8'))) + '\r\n' # length of the data
     request += 'Accept-Encoding: identity\r\n'
     request += 'Accept: text/html\r\n'
     request += 'Origin: http://' + HOST + '\r\n'
     request += 'Content-Type: application/x-www-form-urlencoded\r\n'
-    if cookies:
+    if cookies: # add on all of the globally known cookies
         request += 'Cookie: ' + parseRequestDict(cookies, '; ') + '\r\n'
     request += '\r\n'
     request += body
-    print "REQUEST", request
-    s.sendall(request.encode())
-    response = s.recv(READ_SIZE)
-    print "RESPONSE", response
-    parseResponseCookies(response)
-    responseMap = resolveResponseHeaders(response)
-    if 'Connection' in responseMap and responseMap['Connection'] == 'close':
-        s.close()
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((HOST, 80))
-        return httpRequest(method, resource, headers, body)
+    #print "REQUEST", request
+    try:
+        s.sendall(request.encode())
+        response = ""
+        # read data in chunks in case of fragmenting
+        while True:
+            data = s.recv(READ_SIZE)
+            if data:
+                response += data
+            else:
+                # no more data
+                break
+        #print "RESPONSE", response
+        parseResponseCookies(response)
+        responseMap = resolveResponseHeaders(response)
+        # if we didn't get a response or the connection will be closed, reopen it and try again
+        if 'Connection' in responseMap and responseMap['Connection'] == 'close' or response == "":
+            print "trying again"
+            s.close()
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((HOST, 80))
+            response = httpRequest(method, resource, headers, body)
+    except Exception as e:
+        print "BIG ERROR TRING AGAIN"
+        response = httpRequest(method, resource, headers, body)
     return response
 
+# parse headers in request map separating with given delimiter
 def parseRequestDict(dict, delim):
     str = ''
     for key in dict:
@@ -89,53 +125,69 @@ def parseRequestDict(dict, delim):
 
 # returns the response gotten from sending the login request to fakebook
 def login():
+    # don't need any additional headers to send login request
     headers = {}
+    # set host
     headers['Host'] = HOST
+    # add username, password, next, and csrftoken to request body
     body = {}
     body['username'] = username
     body['password'] = password
     body['next'] = '%2Ffakebook%2F'
     body['csrfmiddlewaretoken'] = cookies['csrftoken']
+    # send request with body parsed with &
     return httpRequest('POST', '/accounts/login/', headers, parseRequestDict(body, '&'))
 
-# create a subclass and override the handler methods
+# create a subclass and override the handler methods for an HTMLParser
 class MyHTMLParser(HTMLParser):
     def handle_starttag(self, tag, attrs):
         global toVisit
         global secretFlagInData
-        #if its a secret flags:
+        # remember if we found a secret flag
         secretFlagInData = (tag == 'h2' and ('class', 'secret_flag') in attrs)
         for attr in attrs:
+            # check for links to other pages
             if tag == 'a' and attr[0] == 'href' and attr[1][:10] == '/fakebook/':
+                # if we haven't already visited this page, add it to toVisit
                 if not (attr[1]) in visited:
                     toVisit.append(attr[1])
 
     def handle_endtag(self, tag):
+        # don't need to do anything for end tags
         return
 
     def handle_data(self, data):
         global secretFlags
+        # since we remembered if we saw a secret flag, we can store them when we find them
         if secretFlagInData:
-            secretFlags.append(data[6:])
+            secretFlags.add(data[6:])
 
 def main():
     global visited
     global toVisit
-    global visitSize
+    # get the login page
     headers = {}
     headers['Host'] = HOST
     httpRequest('GET', '/accounts/login/', headers, '')
+    # call login function and store response
     loginResponse = login()
+    # parse the login headers
     loginHeaders = resolveResponseHeaders(loginResponse)
-    print "LOGIN: ", loginResponse
+    #print "LOGIN: ", loginResponse
+    # add the home page to toVisit
     toVisit.append(loginHeaders['Location'])
+    # init html parser
     parser = MyHTMLParser()
+    # visit all the pages we find
     while len(toVisit) > 0:
-        visitSize+=1
+        print "visiting new page"
+        # remove a page when we visit it
         curPage = toVisit.pop(0)
+        # remember that we've visited a page
         visited[curPage] = True
         response = httpRequest('GET', curPage, headers, '')
         try:
+            # find start of HTML
             firstTagIdx = response.index('<')
             htmlText = response[firstTagIdx:]
             parser.feed(htmlText)
