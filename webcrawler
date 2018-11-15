@@ -114,6 +114,7 @@ class MyHTMLParser(HTMLParser):
             if tag == 'a' and attr[0] == 'href' and attr[1][:10] == '/fakebook/':
                 if not (attr[1]) in visited:
                     toVisit.append(attr[1])
+                    visited[attr[1]] = True
 
     def handle_endtag(self, tag):
         return
@@ -138,7 +139,6 @@ def main():
     while len(toVisit) > 0:
         visitSize+=1
         curPage = toVisit.pop(0)
-        visited[curPage] = True
         response = httpRequest('GET', curPage, headers, '')
         try:
             firstTagIdx = response.index('<')
