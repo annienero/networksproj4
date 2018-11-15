@@ -172,6 +172,11 @@ class MyHTMLParser(HTMLParser):
         #if its a secret flags:
         secretFlagInData = (tag == 'h2' and ('class', 'secret_flag') in attrs)
         for attr in attrs:
+            if '<' in attr or '>' in attr:
+                print "LOL I AM MURDER UR FAMILY"
+                print "tag:", tag
+                print "attrs:", attrs
+                raise Exception('poop on u')
             if tag == 'a' and attr[0] == 'href' and attr[1][:10] == '/fakebook/':
                 if not (attr[1]) in visited:
                     toVisit.append(attr[1])
@@ -210,6 +215,7 @@ def main():
         try:
             firstTagIdx = response.index('<')
             htmlText = response[firstTagIdx:]
+            print "GIVEN HTML", htmlText
             parser.feed(htmlText)
         except Exception as e:
             pass
