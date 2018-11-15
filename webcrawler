@@ -53,12 +53,40 @@ def parseResponseCookies(response):
 
 def badResponse(response):
   tokens = response.split(" ")
-  print("got a 400 bad request")
+  print"------ got a 400 bad request:", response
   return tokens[1] == "400"
+
+# assumes that we've read up through the headers
+def handleNormalBody(responseHeaders):
+  global s
+  print("---- HANDLING NORMAL BODY")
+  return s.recv(int(responseHeaders['Content-Length']))
+  
+def handleChunkedBody(responseHeaders):
+  global s
+  print(" ---- HANDLING CHUNKED BODY")
+  body = ""
+  chunk = ""
+  curLen = None
+  while True:
+    char = s.recv(1)
+    chunk += char
+    if char == "\n":
+      curLen = int(chunk[0:len(chunk)-2], 16)
+      if curLen == 0:
+        return body
+      body += s.recv(curLen)
+      chunk = "" # reset chunk
+      #eat the extra newline
+      eater = s.recv(2)
+
+
+    
 
 #returns the response gotten from sending the described HTTP request, and parses cookies from the response
 def httpRequest(method, resource, headers, body):
     global s
+    #build request
     request = method + ' ' + resource + ' ' + HTTP_VERSION + '\r\n'
     for key in headers:
         request += key + ': ' + headers[key] + '\r\n'
@@ -73,8 +101,31 @@ def httpRequest(method, resource, headers, body):
     request += '\r\n'
     request += body
     print "REQUEST", request
+    # send request
     s.sendall(request.encode())
-    response = s.recv(READ_SIZE)
+    # read response headers
+    response = ""
+    while True:
+      chunk = s.recv(1)
+      if not chunk:
+        print(" -------------- CHUNK WAS EMPTY, SOMETHING HAS GONE HORRIBLY WRONG ---------------")
+        #reopen connection
+        s.close()
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect((HOST, 80))
+        s.sendall(request.encode())
+      response += chunk
+      if "\r\n\r\n" in response:
+        break
+    responseHeaders = resolveResponseHeaders(response)
+    print "------- RESPONSE SO FAR:", response
+
+    if 'Transfer-Encoding' in responseHeaders and responseHeaders['Transfer-Encoding'] == 'chunked':
+      response += handleChunkedBody(responseHeaders)
+    elif 'Content-Length' in responseHeaders:
+      response += handleNormalBody(responseHeaders)
+
+    #done receiving response
     print "RESPONSE", response
     parseResponseCookies(response)
     responseMap = resolveResponseHeaders(response)
@@ -134,7 +185,13 @@ def main():
     loginResponse = login()
     loginHeaders = resolveResponseHeaders(loginResponse)
     print "LOGIN: ", loginResponse
-    toVisit.append(loginHeaders['Location'])
+    while 'Location' not in loginHeaders:
+      loginResponse = login()
+      loginHeaders = resolveResponseHeaders(loginResponse)
+      print "TRY LOGIN AGAIN: ", loginResponse
+    locationHeader = loginHeaders['Location']
+    toVisit.append(locationHeader[locationHeader.index('/fakebook/'):])
+    #toVisit.append("/")
     parser = MyHTMLParser()
     while len(toVisit) > 0:
         visitSize+=1
@@ -149,4 +206,21 @@ def main():
 main()
 for flag in secretFlags:
     print flag
+
+req = """GET /fakebook/ HTTP/1.1
+Host: fring.ccs.neu.edu
+Connection: keep-alive
+Content-Length: 0
+Accept-Encoding: identity
+Accept: text/html
+Origin: http://fring.ccs.neu.edu
+Content-Type: application/x-www-form-urlencoded
+Cookie: csrftoken=8e749c0900959eca5b9ea9d6c9e2cc5f; sessionid=a39de56630922ee1b0e1cbccd733152f\r\n\r\n"""
+
+#s.sendall(req.encode())
+#resp = s.recv(READ_SIZE)
+#print "RESPONSE", resp
+
+
 s.close()
+print("---- END OF PROGRAM ----")
