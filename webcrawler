@@ -80,7 +80,10 @@ def handleChunkedBody(responseHeaders):
       curLen = int(chunk[0:len(chunk)-2], 16)
       if curLen == 0:
         return body
-      body += s.recv(curLen)
+      while curLen > 0:
+          read = s.recv(curLen)
+          body += read
+          curLen -= len(read)      
       chunk = "" # reset chunk
       #eat the extra newline
       eater = s.recv(2)
