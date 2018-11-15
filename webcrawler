@@ -74,6 +74,9 @@ def handleChunkedBody(responseHeaders):
     if char == "\n":
       print "about to read this chunk as hex length: ", chunk
       print "and the body so far is: ", body
+      print "length of the body: ", str(len(body))
+      print "and the actual hex decimal we get is: ", int(chunk[0:len(chunk)-2], 16)
+      print "---------^^^^^^^^^^^^^^^^-----------"
       curLen = int(chunk[0:len(chunk)-2], 16)
       if curLen == 0:
         return body
