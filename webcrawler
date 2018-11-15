@@ -51,6 +51,11 @@ def parseResponseCookies(response):
             value = cookieInfo[equalIdx + 1:semicolonIdx]
             cookies[key] = value
 
+def badResponse(response):
+  tokens = response.split(" ")
+  print("got a 400 bad request")
+  return tokens[1] == "400"
+
 #returns the response gotten from sending the described HTTP request, and parses cookies from the response
 def httpRequest(method, resource, headers, body):
     global s
@@ -73,7 +78,7 @@ def httpRequest(method, resource, headers, body):
     print "RESPONSE", response
     parseResponseCookies(response)
     responseMap = resolveResponseHeaders(response)
-    if 'Connection' in responseMap and responseMap['Connection'] == 'close':
+    if 'Connection' in responseMap and responseMap['Connection'] == 'close' and not badResponse(response):
         s.close()
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((HOST, 80))
