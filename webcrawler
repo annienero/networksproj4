@@ -5,27 +5,30 @@ import socket
 import Queue
 from HTMLParser import HTMLParser
 
+#constants
 HOST = 'fring.ccs.neu.edu'
 HTTP_VERSION = 'HTTP/1.1'
 READ_SIZE = 8192
 
+# set up socket
 username = sys.argv[1]
 password = sys.argv[2]
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect((HOST, 80))
 
-cookies = {}
-visited = {}
-toVisit = []
-secretFlags = []
-secretFlagInData = False
-visitSize = 0
+cookies = {} # response cookies
+visited = {} # visited pages
+toVisit = [] # pages to visit
+secretFlags = [] # found flags
+secretFlagInData = False # for HTMLParser
 
-
+# make a map of all the header in response
 def resolveResponseHeaders(response):
     headerMap = {}
+    # split into a list of lines
     tokenizedResponse = response.decode('utf-8').split('\r\n')
     for line in tokenizedResponse:
+        # at the end of headers
         if line == '\r\n':
             break
         try:
@@ -51,10 +54,12 @@ def parseResponseCookies(response):
             value = cookieInfo[equalIdx + 1:semicolonIdx]
             cookies[key] = value
 
+# check for 400 responses
 def badResponse(response):
   tokens = response.split(" ")
   return tokens[1][0:1] == "4"
 
+# check for 301 response
 def checkResourceMoved(response):
     tokens = response.split(" ")
     return tokens[1] == "301"
@@ -64,6 +69,7 @@ def handleNormalBody(responseHeaders):
   global s
   return s.recv(int(responseHeaders['Content-Length']))
   
+# read chunked response bodies
 def handleChunkedBody(responseHeaders):
   global s
   body = ""
@@ -101,7 +107,6 @@ def httpRequest(method, resource, headers, body):
         request += 'Cookie: ' + parseRequestDict(cookies, '; ') + '\r\n'
     request += '\r\n'
     request += body
-    #print "REQUEST", request
     # send request
     s.sendall(request.encode())
     # read response headers
@@ -125,15 +130,15 @@ def httpRequest(method, resource, headers, body):
       response += handleNormalBody(responseHeaders)
 
     #done receiving response
-    #print "RESPONSE", response
     parseResponseCookies(response)
     responseMap = resolveResponseHeaders(response)
+    
+    #check if we need to redirect
     if checkResourceMoved(response):
         if 'Location' in responseMap:
-            print "GOING TO NEW RESOURCE"
             return httpRequest(method, responseMap['Location'], headers, body)
-        else:
-            print "BIG ERROR COULD NOT FIND LOCATION OH GOF"
+
+    # check if we need to reconnect
     if 'Connection' in responseMap and responseMap['Connection'] == 'close' and not badResponse(response):
         s.close()
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -159,7 +164,6 @@ def login():
     body['csrfmiddlewaretoken'] = cookies['csrftoken']
     return httpRequest('POST', '/accounts/login/', headers, parseRequestDict(body, '&'))
 
-
 def containsIllegalChars(str):
     #print "STR IS", str
     return '\r' in str or '\n' in str or '<' in str or '>' in str
@@ -176,8 +180,7 @@ class MyHTMLParser(HTMLParser):
                 if not (attr[1]) in visited and not containsIllegalChars(attr[1]):
                     toVisit.append(attr[1])
                     visited[attr[1]] = True
-
-
+                    
     def handle_endtag(self, tag):
         return
 
@@ -189,13 +192,11 @@ class MyHTMLParser(HTMLParser):
 def main():
     global visited
     global toVisit
-    global visitSize
     headers = {}
     headers['Host'] = HOST
     httpRequest('GET', '/accounts/login/', headers, '')
     loginResponse = login()
     loginHeaders = resolveResponseHeaders(loginResponse)
-    #print "LOGIN: ", loginResponse
     while 'Location' not in loginHeaders:
       loginResponse = login()
       loginHeaders = resolveResponseHeaders(loginResponse)
@@ -204,7 +205,6 @@ def main():
     toVisit.append(locationHeader[locationHeader.index('/fakebook/'):])
     parser = MyHTMLParser()
     while len(toVisit) > 0:
-        visitSize+=1
         curPage = toVisit.pop(0)
         response = httpRequest('GET', curPage, headers, '')
         try:
