@@ -54,17 +54,14 @@ def parseResponseCookies(response):
 def badResponse(response):
   tokens = response.split(" ")
   return tokens[1][0:1] == "4"
-  print"------ got a 400 bad response:", response[:25]
 
 # assumes that we've read up through the headers
 def handleNormalBody(responseHeaders):
   global s
-  print("---- HANDLING NORMAL BODY")
   return s.recv(int(responseHeaders['Content-Length']))
   
 def handleChunkedBody(responseHeaders):
   global s
-  print(" ---- HANDLING CHUNKED BODY")
   body = ""
   chunk = ""
   curLen = None
@@ -72,11 +69,6 @@ def handleChunkedBody(responseHeaders):
     char = s.recv(1)
     chunk += char
     if char == "\n":
-      print "about to read this chunk as hex length: ", chunk
-      print "and the body so far is: ", body
-      print "length of the body: ", str(len(body))
-      print "and the actual hex decimal we get is: ", int(chunk[0:len(chunk)-2], 16)
-      print "---------^^^^^^^^^^^^^^^^-----------"
       curLen = int(chunk[0:len(chunk)-2], 16)
       if curLen == 0:
         return body
@@ -87,9 +79,6 @@ def handleChunkedBody(responseHeaders):
       chunk = "" # reset chunk
       #eat the extra newline
       eater = s.recv(2)
-
-
-    
 
 #returns the response gotten from sending the described HTTP request, and parses cookies from the response
 def httpRequest(method, resource, headers, body):
@@ -116,7 +105,6 @@ def httpRequest(method, resource, headers, body):
     while True:
       chunk = s.recv(1)
       if not chunk:
-        print(" -------------- CHUNK WAS EMPTY, SOMETHING HAS GONE HORRIBLY WRONG ---------------")
         #reopen connection
         s.close()
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -126,7 +114,6 @@ def httpRequest(method, resource, headers, body):
       if "\r\n\r\n" in response:
         break
     responseHeaders = resolveResponseHeaders(response)
-    print "------- RESPONSE SO FAR:", response
 
     if 'Transfer-Encoding' in responseHeaders and responseHeaders['Transfer-Encoding'] == 'chunked':
       response += handleChunkedBody(responseHeaders)
@@ -138,12 +125,10 @@ def httpRequest(method, resource, headers, body):
     parseResponseCookies(response)
     responseMap = resolveResponseHeaders(response)
     if 'Connection' in responseMap and responseMap['Connection'] == 'close' and not badResponse(response):
-        print(" ------------ RETRYING BECAUSE CONNECTION CLOSE OR SOME SHI ---------")
         s.close()
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((HOST, 80))
         return httpRequest(method, resource, headers, body)
-    print("mADE IT THROUGH ----- ----- - -- - --  ABOUT TO RETURN RESPONSE FROM HTTPREQUEST")
     return response
 
 def parseRequestDict(dict, delim):
@@ -164,6 +149,11 @@ def login():
     body['csrfmiddlewaretoken'] = cookies['csrftoken']
     return httpRequest('POST', '/accounts/login/', headers, parseRequestDict(body, '&'))
 
+
+def containsIllegalChars(str):
+    print "STR IS", str
+    return '\r' in str or '\n' in str or '<' in str or '>' in str
+
 # create a subclass and override the handler methods
 class MyHTMLParser(HTMLParser):
     def handle_starttag(self, tag, attrs):
@@ -172,15 +162,11 @@ class MyHTMLParser(HTMLParser):
         #if its a secret flags:
         secretFlagInData = (tag == 'h2' and ('class', 'secret_flag') in attrs)
         for attr in attrs:
-            if '<' in attr or '>' in attr:
-                print "LOL I AM MURDER UR FAMILY"
-                print "tag:", tag
-                print "attrs:", attrs
-                raise Exception('poop on u')
             if tag == 'a' and attr[0] == 'href' and attr[1][:10] == '/fakebook/':
-                if not (attr[1]) in visited:
+                if not (attr[1]) in visited and not containsIllegalChars(attr[1]):
                     toVisit.append(attr[1])
                     visited[attr[1]] = True
+
 
     def handle_endtag(self, tag):
         return
@@ -206,7 +192,6 @@ def main():
       print "TRY LOGIN AGAIN: ", loginResponse
     locationHeader = loginHeaders['Location']
     toVisit.append(locationHeader[locationHeader.index('/fakebook/'):])
-    #toVisit.append("/")
     parser = MyHTMLParser()
     while len(toVisit) > 0:
         visitSize+=1
@@ -215,28 +200,10 @@ def main():
         try:
             firstTagIdx = response.index('<')
             htmlText = response[firstTagIdx:]
-            print "GIVEN HTML", htmlText
             parser.feed(htmlText)
         except Exception as e:
             pass
 main()
 for flag in secretFlags:
     print flag
-
-req = """GET /fakebook/ HTTP/1.1
-Host: fring.ccs.neu.edu
-Connection: keep-alive
-Content-Length: 0
-Accept-Encoding: identity
-Accept: text/html
-Origin: http://fring.ccs.neu.edu
-Content-Type: application/x-www-form-urlencoded
-Cookie: csrftoken=8e749c0900959eca5b9ea9d6c9e2cc5f; sessionid=a39de56630922ee1b0e1cbccd733152f\r\n\r\n"""
-
-#s.sendall(req.encode())
-#resp = s.recv(READ_SIZE)
-#print "RESPONSE", resp
-
-
 s.close()
-print("---- END OF PROGRAM ----")
