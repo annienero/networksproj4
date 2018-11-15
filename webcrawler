@@ -55,6 +55,10 @@ def badResponse(response):
   tokens = response.split(" ")
   return tokens[1][0:1] == "4"
 
+def checkResourceMoved(response):
+    tokens = response.split(" ")
+    return tokens[1] == "301"
+
 # assumes that we've read up through the headers
 def handleNormalBody(responseHeaders):
   global s
@@ -97,7 +101,7 @@ def httpRequest(method, resource, headers, body):
         request += 'Cookie: ' + parseRequestDict(cookies, '; ') + '\r\n'
     request += '\r\n'
     request += body
-    print "REQUEST", request
+    #print "REQUEST", request
     # send request
     s.sendall(request.encode())
     # read response headers
@@ -121,9 +125,15 @@ def httpRequest(method, resource, headers, body):
       response += handleNormalBody(responseHeaders)
 
     #done receiving response
-    print "RESPONSE", response
+    #print "RESPONSE", response
     parseResponseCookies(response)
     responseMap = resolveResponseHeaders(response)
+    if checkResourceMoved(response):
+        if 'Location' in responseMap:
+            print "GOING TO NEW RESOURCE"
+            return httpRequest(method, responseMap['Location'], headers, body)
+        else:
+            print "BIG ERROR COULD NOT FIND LOCATION OH GOF"
     if 'Connection' in responseMap and responseMap['Connection'] == 'close' and not badResponse(response):
         s.close()
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -151,7 +161,7 @@ def login():
 
 
 def containsIllegalChars(str):
-    print "STR IS", str
+    #print "STR IS", str
     return '\r' in str or '\n' in str or '<' in str or '>' in str
 
 # create a subclass and override the handler methods
@@ -185,7 +195,7 @@ def main():
     httpRequest('GET', '/accounts/login/', headers, '')
     loginResponse = login()
     loginHeaders = resolveResponseHeaders(loginResponse)
-    print "LOGIN: ", loginResponse
+    #print "LOGIN: ", loginResponse
     while 'Location' not in loginHeaders:
       loginResponse = login()
       loginHeaders = resolveResponseHeaders(loginResponse)
