@@ -53,8 +53,8 @@ def parseResponseCookies(response):
 
 def badResponse(response):
   tokens = response.split(" ")
-  print"------ got a 400 bad request:", response
-  return tokens[1] == "400"
+  return tokens[1][0:1] == "4"
+  print"------ got a 400 bad response:", response[:25]
 
 # assumes that we've read up through the headers
 def handleNormalBody(responseHeaders):
@@ -72,6 +72,8 @@ def handleChunkedBody(responseHeaders):
     char = s.recv(1)
     chunk += char
     if char == "\n":
+      print "about to read this chunk as hex length: ", chunk
+      print "and the body so far is: ", body
       curLen = int(chunk[0:len(chunk)-2], 16)
       if curLen == 0:
         return body
@@ -130,10 +132,12 @@ def httpRequest(method, resource, headers, body):
     parseResponseCookies(response)
     responseMap = resolveResponseHeaders(response)
     if 'Connection' in responseMap and responseMap['Connection'] == 'close' and not badResponse(response):
+        print(" ------------ RETRYING BECAUSE CONNECTION CLOSE OR SOME SHI ---------")
         s.close()
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.connect((HOST, 80))
         return httpRequest(method, resource, headers, body)
+    print("mADE IT THROUGH ----- ----- - -- - --  ABOUT TO RETURN RESPONSE FROM HTTPREQUEST")
     return response
 
 def parseRequestDict(dict, delim):
